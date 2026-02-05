@@ -1,48 +1,131 @@
-<script>
-// index.html içindeki script kısmını bu şekilde güncelleyin
-const tg = window.Telegram.WebApp;
-tg.expand(); 
-
-const urlParams = new URLSearchParams(window.location.search);
-const selectedSymbol = urlParams.get('symbol') || 'AKBNK';
-
-async function updateData() {
-    // Ngrok linkinizi buraya tam yazın
-    const baseUrl = "https://melodramatically-nonumbilical-sonya.ngrok-free.dev";
-    const url = `${baseUrl}/get-data/${selectedSymbol}`; 
-
-    try {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error("Sunucu hatası");
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Borsa Canlı Derinlik</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        /* Koyu Tema ve Şık Tasarım */
+        body { 
+            background-color: #0d1117; 
+            color: #c9d1d9; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; 
+            margin: 0; 
+            padding: 10px;
+            overflow-x: hidden;
+        }
+        .card { 
+            background: #161b22; 
+            border-radius: 12px; 
+            padding: 16px; 
+            border: 1px solid #30363d; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            border-bottom: 1px solid #30363d; 
+            padding-bottom: 12px; 
+            margin-bottom: 10px;
+        }
+        .symbol { font-size: 22px; font-weight: 800; color: #ffffff; }
+        .price { font-size: 20px; font-weight: bold; color: #58a6ff; }
         
-        const data = await response.json();
+        table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 5px; }
+        th { color: #8b949e; padding: 10px 5px; font-weight: 500; border-bottom: 1px solid #30363d; text-align: center; }
+        td { padding: 10px 5px; text-align: center; border-bottom: 1px solid #21262d; }
         
-        if(data.error) {
-            console.log("API Hatası:", data.error);
-            return;
+        .bid { color: #3fb950; font-weight: bold; } /* Alış - Yeşil */
+        .ask { color: #f85149; font-weight: bold; } /* Satış - Kırmızı */
+        .lot { color: #8b949e; font-family: monospace; }
+        
+        .status-bar {
+            font-size: 11px;
+            text-align: center;
+            margin-top: 15px;
+            color: #484f58;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="header">
+            <span id="symbol" class="symbol">YÜKLENİYOR</span>
+            <span id="price" class="price">--₺</span>
+        </div>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>ADET</th>
+                    <th>ALIŞ | SATIŞ</th>
+                    <th>ADET</th>
+                </tr>
+            </thead>
+            <tbody id="depth-table">
+                <tr><td colspan="3" style="padding:40px;">Veriler çekiliyor...</td></tr>
+            </tbody>
+        </table>
+
+        <div id="last-update" class="status-bar">Bağlantı kuruluyor...</div>
+    </div>
+
+    <script>
+        // Telegram Web App Ayarları
+        const tg = window.Telegram.WebApp;
+        tg.expand(); // Uygulamayı tam ekran açar
+        tg.ready();
+
+        // Bot tarafından gönderilen sembolü al (Örn: ?symbol=THYAO)
+        const urlParams = new URLSearchParams(window.location.search);
+        const selectedSymbol = urlParams.get('symbol') || 'AKBNK';
+        
+        // ÖNEMLİ: Aktif Ngrok linkinizi buraya yapıştırın
+        // Ngrok'u her başlattığınızda burayı güncelleyip GitHub'a kaydedin.
+        const NGROK_URL = "https://melodramatically-nonumbilical-sonya.ngrok-free.dev";
+
+        async function updateData() {
+            try {
+                const response = await fetch(`${NGROK_URL}/get-data/${selectedSymbol}`);
+                if (!response.ok) throw new Error("Sunucuya ulaşılamıyor");
+                
+                const data = await response.json();
+                
+                // Başlık ve Fiyat Güncelleme
+                document.getElementById('symbol').innerText = data.sembol || selectedSymbol;
+                document.getElementById('price').innerText = (data.fiyat || "0.00") + "₺";
+
+                let html = "";
+                const depth = data.derinlik.depth;
+                
+                // İlk 10 derinlik satırını oluştur
+                for (let i = 0; i < 10; i++) {
+                    const bid = depth.bids[i] || { quantity: '-', price: '-' };
+                    const ask = depth.asks[i] || { quantity: '-', price: '-' };
+                    
+                    html += `
+                        <tr>
+                            <td class="lot">${bid.quantity}</td>
+                            <td><span class="bid">${bid.price}</span> | <span class="ask">${ask.price}</span></td>
+                            <td class="lot">${ask.quantity}</td>
+                        </tr>`;
+                }
+                
+                document.getElementById('depth-table').innerHTML = html;
+                document.getElementById('last-update').innerText = "Son Güncelleme: " + new Date().toLocaleTimeString();
+                
+            } catch (e) {
+                console.error("Veri hatası:", e);
+                document.getElementById('last-update').innerText = "Hata: Ngrok veya Bot kapalı!";
+                document.getElementById('last-update').style.color = "#f85149";
+            }
         }
 
-        document.getElementById('symbol').innerText = data.sembol;
-        document.getElementById('price').innerText = data.fiyat + "₺";
-
-        let html = "";
-        const depth = data.derinlik.depth;
-        // En fazla 10 satır göster
-        for (let i = 0; i < 10; i++) {
-            if(!depth.bids[i] && !depth.asks[i]) continue;
-            html += `<tr>
-                <td style="color:#8b949e">${depth.bids[i]?.quantity || '-'}</td>
-                <td><span style="color:#3fb950; font-weight:bold">${depth.bids[i]?.price || '-'}</span> | <span style="color:#f85149; font-weight:bold">${depth.asks[i]?.price || '-'}</span></td>
-                <td style="color:#8b949e">${depth.asks[i]?.quantity || '-'}</td>
-            </tr>`;
-        }
-        document.getElementById('depth-table').innerHTML = html;
-    } catch (e) {
-        console.error("Bağlantı kesildi, tekrar deneniyor...", e);
-    }
-}
-
-// 2 saniyede bir kesin güncelleme
-setInterval(updateData, 2000);
-updateData();
-</script>
+        // 2 saniyede bir canlı güncelleme yap
+        setInterval(updateData, 2000);
+        updateData(); // İlk açılışta hemen çalıştır
+    </script>
+</body>
+</html>
